@@ -1,0 +1,252 @@
+<title>Tar Heel Schedule Builder</title>
+<!-- TEMPLATE: replace __DATA__ (array of option objects), __PRESETS__ (array of {name,tag,keys}), __GRADES__ (object instructor->avg grade or {}) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<style>
+/* Layout: sticky header with totals, left pool of sections, right weekly calendar, selected list under calendar */
+:root{
+  --bg:#f3f6fa; --panel:#ffffff; --fg:#13294b; --muted:#5b6b82; --line:#d8e0ea;
+  --accent:#4b9cd3; --accent-ink:#0b4a7a; --accent-soft:#e3f0f9;
+  --bad:#b3261e; --bad-soft:#fbe9e7; --warn:#8a5a00; --warn-soft:#fff3d6; --ok:#1d6b3a; --ok-soft:#e2f4e8;
+  --c-req:#4b9cd3; --c-math:#7a6bc4; --c-econ:#d98a2b; --c-bus:#3a9d8f; --c-sem:#c2578a;
+  --font-d:'Barlow Condensed','Arial Narrow',sans-serif; --font-b:'IBM Plex Sans',system-ui,sans-serif; --font-m:'IBM Plex Mono',ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0d1726; --panel:#14233a; --fg:#e6edf6; --muted:#97a8bf; --line:#27384f;
+  --accent:#5aa9de; --accent-ink:#a9d4f3; --accent-soft:#1b3550;
+  --bad:#ff8a80; --bad-soft:#3a1d1d; --warn:#f0c46a; --warn-soft:#3a2e12; --ok:#7fd49b; --ok-soft:#173523;
+  --c-req:#5aa9de; --c-math:#9d90e6; --c-econ:#efa44c; --c-bus:#5cc2b3; --c-sem:#e47bab; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0d1726; --panel:#14233a; --fg:#e6edf6; --muted:#97a8bf; --line:#27384f;
+  --accent:#5aa9de; --accent-ink:#a9d4f3; --accent-soft:#1b3550;
+  --bad:#ff8a80; --bad-soft:#3a1d1d; --warn:#f0c46a; --warn-soft:#3a2e12; --ok:#7fd49b; --ok-soft:#173523;
+  --c-req:#5aa9de; --c-math:#9d90e6; --c-econ:#efa44c; --c-bus:#5cc2b3; --c-sem:#e47bab; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:14px/1.45 var(--font-b);padding-inline:16px;padding-block:0 32px}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--bg);padding-block:12px 10px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:10px 24px;align-items:center}
+h1{font:700 26px/1 var(--font-d);letter-spacing:.02em;margin:0;text-transform:uppercase}
+h1 small{display:block;font:400 12px var(--font-b);letter-spacing:0;text-transform:none;color:var(--muted);margin-top:3px}
+.stats{display:flex;flex-wrap:wrap;gap:8px}
+.stat{background:var(--panel);border:1px solid var(--line);padding:5px 10px;min-width:92px}
+.stat b{display:block;font:600 18px/1.1 var(--font-m);font-variant-numeric:tabular-nums}
+.stat span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.stat.ok b{color:var(--ok)} .stat.bad b{color:var(--bad)} .stat.warn b{color:var(--warn)}
+.presets{display:flex;flex-wrap:wrap;gap:6px;margin-left:auto}
+.btn{border:1px solid var(--line);background:var(--panel);padding:5px 10px;border-radius:4px}
+.btn:hover{border-color:var(--accent)}
+.btn.on{background:var(--accent);border-color:var(--accent);color:#06233b}
+.main{display:grid;grid-template-columns:minmax(300px,380px) minmax(0,1fr);gap:16px;margin-top:14px;align-items:start}
+@media(max-width:900px){.main{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--panel);border:1px solid var(--line)}
+.pool{max-height:calc(100vh - 110px);display:flex;flex-direction:column;position:sticky;top:calc(env(safe-area-inset-top,0px) + 96px)}
+@media(max-width:900px){.pool{position:static;max-height:none}}
+.filters{padding:10px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
+.filters input[type=search]{width:100%;padding:7px 9px;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:4px;font:inherit}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{border:1px solid var(--line);background:transparent;padding:2px 9px;border-radius:99px;font-size:12px}
+.chip.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-ink)}
+.checks{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--muted)}
+.checks label{display:flex;gap:5px;align-items:center;cursor:pointer}
+.list{overflow:auto;flex:1;min-height:0}
+@media(max-width:900px){.list{max-height:60vh}}
+details.course{border-bottom:1px solid var(--line)}
+details.course>summary{list-style:none;cursor:pointer;padding:8px 10px;display:flex;gap:8px;align-items:baseline;border-left:4px solid var(--cc)}
+details.course>summary::-webkit-details-marker{display:none}
+.cn{font:600 13px var(--font-m)} .ct{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted);font-size:12px}
+.cnt{font:12px var(--font-m);color:var(--muted)}
+.sec{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 8px;width:100%;text-align:left;padding:7px 10px 7px 14px;border:0;border-top:1px dashed var(--line);background:transparent}
+.sec:hover{background:var(--accent-soft)}
+.sec .tick{width:16px;height:16px;border:1.5px solid var(--muted);border-radius:3px;margin-top:2px;display:grid;place-items:center;font-size:12px;line-height:1}
+.sec.sel{background:var(--accent-soft)} .sec.sel .tick{background:var(--accent);border-color:var(--accent);color:#06233b}
+.sec .t{font:12.5px var(--font-m)} .sec .i{font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:2px 8px}
+.sec.blocked{opacity:.55}
+.tag{font-size:11px;padding:0 6px;border-radius:3px;background:var(--bg);border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.tag.bad{background:var(--bad-soft);color:var(--bad);border-color:transparent}
+.tag.warn{background:var(--warn-soft);color:var(--warn);border-color:transparent}
+.tag.ok{background:var(--ok-soft);color:var(--ok);border-color:transparent}
+.right{display:flex;flex-direction:column;gap:16px;min-width:0}
+.calwrap{overflow-x:auto}
+.cal{display:grid;grid-template-columns:48px repeat(5,minmax(104px,1fr));min-width:620px;position:relative}
+.cal .dh{font:700 15px var(--font-d);letter-spacing:.06em;text-transform:uppercase;padding:6px;text-align:center;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0}
+.cal .hr{font:11px var(--font-m);color:var(--muted);text-align:right;padding-right:6px;position:relative}
+.cal .hr span{position:relative;top:-7px}
+.col{position:relative;border-left:1px solid var(--line)}
+.col .grid{position:absolute;left:0;right:0;border-top:1px solid var(--line);opacity:.7}
+.blk{position:absolute;left:3px;right:3px;padding:3px 5px;border-radius:3px;font-size:11.5px;line-height:1.25;overflow:hidden;color:#fff;background:var(--bc);border:1px solid rgba(0,0,0,.2);cursor:pointer;text-align:left}
+:root[data-theme="dark"] .blk,:root:not([data-theme="light"]) .blk{color:#07182a}
+@media(prefers-color-scheme:light){:root:not([data-theme="dark"]) .blk{color:#fff}}
+:root[data-theme="light"] .blk{color:#fff}
+.blk b{font:600 12px var(--font-m);display:block}
+.blk.conf{background:repeating-linear-gradient(45deg,var(--bad),var(--bad) 6px,color-mix(in srgb,var(--bad) 70%,#000) 6px,color-mix(in srgb,var(--bad) 70%,#000) 12px);color:#fff!important}
+.blk.ghost{background:transparent;border:2px dashed var(--bc);color:var(--fg)!important;pointer-events:none;z-index:5}
+.blk.ghost.conf{background:var(--bad-soft);border-color:var(--bad)}
+.sum{padding:12px}
+.sum h2{font:700 18px var(--font-d);letter-spacing:.05em;text-transform:uppercase;margin:0 0 8px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{font:600 11px var(--font-b);text-transform:uppercase;letter-spacing:.05em;color:var(--muted);text-align:left;padding:4px 8px;border-bottom:1px solid var(--line)}
+td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+td.n{font-family:var(--font-m);font-variant-numeric:tabular-nums}
+.tw{overflow-x:auto}
+select{font:inherit;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:4px;padding:2px 4px}
+.x{border:0;background:transparent;color:var(--muted);font-size:16px;padding:0 6px}
+.x:hover{color:var(--bad)}
+.notes{padding:12px;font-size:13px;color:var(--muted)} .notes b{color:var(--fg)}
+.notes ul{margin:6px 0 0;padding-left:18px}
+.empty{padding:18px;color:var(--muted);text-align:center}
+.link{color:var(--accent-ink)}
+.th-toggle{margin-left:8px}
+</style>
+
+<header>
+  <h1>Tar Heel Schedule Builder<small>Spring 2027 · select sections, watch the calendar</small></h1>
+  <div class="stats" id="stats"></div>
+  <div class="presets" id="presets"></div>
+</header>
+
+<div class="main">
+  <aside class="panel pool">
+    <div class="filters">
+      <input type="search" id="q" placeholder="Search course, title or professor" aria-label="Search sections">
+      <div class="chips" id="gchips"></div>
+      <div class="checks">
+        <label><input type="checkbox" id="f-conf"> Hide conflicts</label>
+        <label><input type="checkbox" id="f-8"> Hide 8am</label>
+        <label><input type="checkbox" id="f-fri"> Hide Friday</label>
+        <label><input type="checkbox" id="f-rmp"> RMP 3.9+ only</label>
+      </div>
+    </div>
+    <div class="list" id="list"></div>
+  </aside>
+  <section class="right">
+    <div class="panel calwrap"><div class="cal" id="cal"></div></div>
+    <div class="panel sum"><h2>Your schedule</h2><div class="tw" id="sel"></div></div>
+    <div class="panel notes" id="notes"></div>
+  </section>
+</div>
+
+<script>
+const DATA=__DATA__;
+const PRESETS=__PRESETS__;
+const GRADES=__GRADES__;
+const DAYS=['M','T','W','R','F'], DN={M:'Mon',T:'Tue',W:'Wed',R:'Thu',F:'Fri'};
+const START=8*60, END=21*60, PX=0.9;
+const byId=Object.fromEntries(DATA.map(o=>[o.id,o]));
+const gcolor=g=>({'Honors Seminar':'--c-sem','STOR 155':'--c-req','BUSI 100':'--c-req','IDST 111L':'--c-req','MATH 347':'--c-math','MATH 383':'--c-math','MATH 383L':'--c-math','Econ core':'--c-econ','Econ elective':'--c-econ','Business':'--c-bus'}[g]||'--c-req');
+/* EDIT: map each option.group to a filter chip. Anything not listed falls into 'Other'. */
+const GROUPS=[['Required',['BUSI 100','STOR 155','Honors Seminar','IDST 111L']],['Math',['MATH 347','MATH 383','MATH 383L']],['Econ',['Econ core','Econ elective']],['Business',['Business']],['Other',[]]];
+let sel=new Set(), waves={}, hover=null, fil={g:new Set(GROUPS.map(x=>x[0])),q:''};
+const W1=['BUSI 100','Honors Seminar','STOR 155','IDST 111L'];
+const f12=m=>{const h=Math.floor(m/60),mi=m%60;return ((h%12)||12)+(mi?':'+String(mi).padStart(2,'0'):':00')+(h<12?'a':'p')};
+const mt=o=>o.meetings.map(m=>m.d+' '+f12(m.s)+'–'+f12(m.e)).join(' · ');
+const ov=(a,b)=>a.meetings.some(m=>b.meetings.some(n=>m.d.split('').some(d=>n.d.includes(d))&&m.s<n.e&&n.s<m.e));
+const eight=o=>o.meetings.some(m=>m.s<9*60), fri=o=>o.meetings.some(m=>m.d.includes('F'));
+const rmpv=o=>o.rmp?parseFloat(o.rmp.overall):null;
+const sels=()=>[...sel].map(i=>byId[i]);
+function conflictsWith(o,list){return list.filter(x=>x.id!==o.id&&ov(o,x))}
+function groupOf(o){for(const [n,gs] of GROUPS) if(gs.includes(o.group)) return n; return 'Other'}
+function rmpTag(o){
+  if(!o.rmp) return o.instr==='TBA'||o.instr==='To Be Announced'?'':'<span class="tag">no RMP page</span>';
+  const r=o.rmp, v=parseFloat(r.overall), cls=v>=4?'ok':v<3.3?'warn':'';
+  return `<span class="tag ${cls}" title="Rate My Professors: quality / difficulty / would take again / ratings">RMP ${r.overall} · diff ${r.diff} · ${r.n} rat.${r.conf&&r.conf!=='High'?' ?':''}</span>`;
+}
+function gradeTag(o){const g=GRADES[o.instr];return g?`<span class="tag ok" title="Average grade">avg ${g}</span>`:''}
+function setStats(){
+  const L=sels(), cr=L.reduce((a,o)=>a+o.credits,0);
+  let w1=0; L.forEach(o=>{if((waves[o.course]||(W1.includes(o.group)?1:2))===1) w1+=o.credits});
+  const conf=new Set(); L.forEach((a,i)=>L.slice(i+1).forEach(b=>{if(ov(a,b)){conf.add(a.id);conf.add(b.id)}}));
+  const dupes=L.filter((a,i)=>L.some((b,j)=>j!==i&&b.course.replace('H','')===a.course.replace('H','')&&b.group===a.group&&a.group!=='Business'&&a.group!=='Econ elective')).length;
+  const e8=L.filter(eight).length, fr=L.filter(fri).length;
+  const cls=(c)=>c;
+  document.getElementById('stats').innerHTML=
+   `<div class="stat ${cr>=15&&cr<=16?'ok':cr>17?'bad':'warn'}"><b>${cr}</b><span>credits (goal 15–16)</span></div>`+
+   `<div class="stat ${w1>13?'bad':''}"><b>${w1}/13</b><span>wave 1 hours</span></div>`+
+   `<div class="stat ${cr>17?'bad':''}"><b>${cr}/17</b><span>wave 2 cap</span></div>`+
+   `<div class="stat ${conf.size?'bad':'ok'}"><b>${conf.size}</b><span>sections in conflict</span></div>`+
+   `<div class="stat ${e8?'warn':''}"><b>${e8}</b><span>8am classes</span></div>`+
+   `<div class="stat ${fr?'warn':''}"><b>${fr}</b><span>Friday classes</span></div>`;
+  return conf;
+}
+function renderCal(conf){
+  const cal=document.getElementById('cal'); const H=(END-START)*PX/60*60; // total px
+  let h=`<div class="dh"></div>`+DAYS.map(d=>`<div class="dh">${DN[d]}</div>`).join('');
+  let hrs=''; for(let t=START;t<END;t+=60){hrs+=`<div style="position:absolute;top:${(t-START)*PX}px;left:0;right:0"><span style="position:relative;top:-7px;float:right;padding-right:6px;font:11px var(--font-m);color:var(--muted)">${f12(t)}</span></div>`}
+  h+=`<div class="hr" style="height:${(END-START)*PX}px">${hrs}</div>`;
+  const items=[...sels().map(o=>({o,ghost:false})),...(hover&&!sel.has(hover.id)?[{o:hover,ghost:true}]:[])];
+  DAYS.forEach(d=>{
+    let c=''; for(let t=START;t<END;t+=60) c+=`<div class="grid" style="top:${(t-START)*PX}px"></div>`;
+    items.forEach(({o,ghost})=>o.meetings.forEach(m=>{ if(!m.d.includes(d)) return;
+      const isC=ghost?conflictsWith(o,sels()).length>0:conf.has(o.id);
+      const top=(Math.max(m.s,START)-START)*PX, hh=(m.e-m.s)*PX-2;
+      c+=`<button class="blk ${ghost?'ghost':''} ${isC?'conf':''}" style="top:${top}px;height:${hh}px;--bc:var(${gcolor(o.group)})" data-id="${o.id}" title="${o.title}">
+        <b>${o.course}-${o.sec}</b>${hh>40?(o.instr&&o.instr!=='TBA'?o.instr:''):''}${hh>58?'<br>'+f12(m.s)+'–'+f12(m.e):''}${hh>74&&m.room?'<br>'+m.room:''}</button>`;
+    }));
+    h+=`<div class="col" style="height:${(END-START)*PX}px">${c}</div>`;
+  });
+  cal.innerHTML=h;
+  cal.querySelectorAll('.blk:not(.ghost)').forEach(b=>b.onclick=()=>toggle(b.dataset.id));
+}
+function renderSel(){
+  const L=sels(); const el=document.getElementById('sel');
+  if(!L.length){el.innerHTML='<div class="empty">Nothing selected yet. Click a section on the left or pick a preset schedule above.</div>';return}
+  el.innerHTML=`<table><thead><tr><th>Course</th><th>Time</th><th>Professor</th><th>Cr</th><th>Wave</th><th></th></tr></thead><tbody>`+
+   L.map(o=>{const w=waves[o.course]||(W1.includes(o.group)?1:2);return `<tr><td class="n">${o.course}-${o.sec}<br><span style="color:var(--muted);font-family:var(--font-b)">${o.title}</span></td><td class="n">${mt(o)}</td><td>${o.instr}<br>${rmpTag(o)} ${gradeTag(o)}</td><td class="n">${o.credits}</td>
+   <td><select data-c="${o.course}" aria-label="Registration wave for ${o.course}"><option value="1" ${w===1?'selected':''}>1</option><option value="2" ${w===2?'selected':''}>2</option></select></td><td><button class="x" data-id="${o.id}" aria-label="Remove ${o.id}">×</button></td></tr>`}).join('')+`</tbody></table>`;
+  el.querySelectorAll('.x').forEach(b=>b.onclick=()=>toggle(b.dataset.id));
+  el.querySelectorAll('select').forEach(s=>s.onchange=()=>{waves[s.dataset.c]=+s.value;update()});
+}
+function renderList(){
+  const L=sels(), q=fil.q.toLowerCase(), hc=g('f-conf'), h8=g('f-8'), hf=g('f-fri'), hr=g('f-rmp');
+  function g(i){return document.getElementById(i).checked}
+  const courses={};
+  DATA.forEach(o=>{ if(!fil.g.has(groupOf(o))) return;
+    if(q&&!(o.course+' '+o.title+' '+o.instr).toLowerCase().includes(q)) return;
+    if(h8&&eight(o)) return; if(hf&&fri(o)) return;
+    if(hr&&!(rmpv(o)>3.9)) return;
+    const bad=conflictsWith(o,L).length>0&&!sel.has(o.id);
+    if(hc&&bad) return;
+    (courses[o.course]=courses[o.course]||[]).push(o)});
+  const keys=Object.keys(courses);
+  const html=keys.map(k=>{const secs=courses[k],o0=secs[0],nsel=secs.filter(s=>sel.has(s.id)).length;
+    const open=(q||nsel||keys.length<6)?'open':'';
+    return `<details class="course" ${open} style="--cc:var(${gcolor(o0.group)})"><summary><span class="cn">${k}</span><span class="ct">${o0.title}</span><span class="cnt">${nsel?nsel+' ✓ · ':''}${secs.length}</span></summary>`+
+    secs.map(o=>{const cf=conflictsWith(o,L), on=sel.has(o.id);
+      const tags=[];
+      if(cf.length&&!on) tags.push(`<span class="tag bad">conflicts ${cf.map(x=>x.course).join(', ')}</span>`);
+      if(eight(o)) tags.push('<span class="tag warn">8am</span>'); if(fri(o)) tags.push('<span class="tag warn">Fri</span>');
+      if(o.honors) tags.push('<span class="tag">honors</span>'); if(o.optional) tags.push('<span class="tag">lab, optional</span>');
+      const seat=o.avail<=10?`<span class="tag bad">${o.avail} seats</span>`:`<span class="tag">${o.avail} seats</span>`;
+      return `<button class="sec ${on?'sel':''} ${cf.length&&!on?'blocked':''}" data-id="${o.id}"><span class="tick">${on?'✓':''}</span><span><div class="t">${o.sec} · ${mt(o)}</div><div class="i"><span>${o.instr}</span>${rmpTag(o)}${gradeTag(o)}${tags.join('')}${seat}</div></span></button>`}).join('')+`</details>`}).join('');
+  const el=document.getElementById('list');
+  el.innerHTML=html||'<div class="empty">No sections match these filters.</div>';
+  el.querySelectorAll('.sec').forEach(b=>{b.onclick=()=>toggle(b.dataset.id);b.onmouseenter=()=>{hover=byId[b.dataset.id];renderCal(statsConf)};b.onmouseleave=()=>{hover=null;renderCal(statsConf)}});
+}
+let statsConf=new Set();
+function renderNotes(){
+  const L=sels(), msgs=[];
+  const pairs=[]; L.forEach((a,i)=>L.slice(i+1).forEach(b=>{if(ov(a,b)) pairs.push(a.course+' overlaps '+b.course)}));
+  pairs.forEach(p=>msgs.push('<b>Conflict:</b> '+p));
+  const maths=L.filter(o=>o.group==='MATH 347'||o.group==='MATH 383');
+  maths.forEach(o=>{const v=rmpv(o); if(v===null||v<=3.9) msgs.push(`<b>Math rule:</b> ${o.course}-${o.sec} (${o.instr}) is not above 3.9 on RMP.`)});
+  if(maths.length>1&&maths.every(o=>rmpv(o)>3.9)) msgs.push('Both math professors are above 3.9, so two math classes are allowed.');
+  const honors=L.filter(o=>o.honors).length; if(honors>2) msgs.push('<b>Wave 1:</b> only 2 honors classes allowed in wave 1.');
+  const econ=L.filter(o=>o.group.startsWith('Econ')&&o.credits>=3&&o.course.match(/ECON (4|5)/)&&!['ECON 400','ECON 410','ECON 420','ECON 470'].includes(o.course));
+  if(econ.length) msgs.push('<b>Prerequisites:</b> ECON 440–486 need ECON 400 and 410 first (per UNC catalog). Check before registering.');
+  const tba=L.filter(o=>o.src==='public'&&(o.instr==='TBA')); if(tba.length) msgs.push('Professor not yet loaded for '+tba.map(o=>o.course+'-'+o.sec).join(', ')+'. Times and seats come from the public class search.');
+  document.getElementById('notes').innerHTML='<b>Checks</b><ul>'+(msgs.map(m=>'<li>'+m+'</li>').join('')||'<li>No problems found.</li>')+'</ul><p style="margin:10px 0 0">Seat counts are from Oct 7 and change fast. This tool never registers you; enroll in ConnectCarolina yourself. Wave caps: 13 hours in wave 1, 17 in wave 2.</p>';
+}
+function toggle(id){ sel.has(id)?sel.delete(id):sel.add(id); update() }
+function update(){ statsConf=setStats(); renderCal(statsConf); renderSel(); renderList(); renderNotes(); try{localStorage.setItem('thsb',JSON.stringify([...sel]))}catch(e){} }
+// presets
+const pe=document.getElementById('presets');
+PRESETS.forEach(p=>{const b=document.createElement('button');b.className='btn';b.textContent=p.name;b.title=p.tag;b.onclick=()=>{sel=new Set(p.keys.filter(k=>byId[k]));update()};pe.appendChild(b)});
+const cl=document.createElement('button');cl.className='btn';cl.textContent='Clear';cl.onclick=()=>{sel=new Set();update()};pe.appendChild(cl);
+// group chips
+const gc=document.getElementById('gchips');
+GROUPS.forEach(([n])=>{const b=document.createElement('button');b.className='chip on';b.textContent=n;b.onclick=()=>{fil.g.has(n)?fil.g.delete(n):fil.g.add(n);b.classList.toggle('on');renderList()};gc.appendChild(b)});
+document.getElementById('q').oninput=e=>{fil.q=e.target.value;renderList()};
+['f-conf','f-8','f-fri','f-rmp'].forEach(i=>document.getElementById(i).onchange=renderList);
+sel=new Set(PRESETS[0].keys.filter(k=>byId[k]));
+update();
+</script>
